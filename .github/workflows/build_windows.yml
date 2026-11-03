@@ -1,4 +1,3 @@
-# Build from source on Windows.
 name: build_windows
 
 concurrency:
@@ -27,11 +26,11 @@ jobs:
             visual_studio_version: 2026
 
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
 
-      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0
         with:
           python-version: '3.12'
 
@@ -60,22 +59,38 @@ jobs:
         if: matrix.os == 'windows-2022'
         shell: pwsh
         run: |
-          $outputDirectory = Join-Path $env:GITHUB_WORKSPACE "vs2022\Release"
+          $workspace = $env:GITHUB_WORKSPACE
+          $stagingDirectory = Join-Path $workspace "windows-x64-artifact"
+
           $requiredFiles = @("pffexport.exe", "pffinfo.exe")
+          $foundFiles = @()
+
           foreach ($file in $requiredFiles) {
-            $path = Join-Path $outputDirectory $file
-            if (-not (Test-Path $path -PathType Leaf)) {
-              throw "Expected build output not found: $path"
+            $found = Get-ChildItem -Path $workspace -Filter $file -File -Recurse -ErrorAction SilentlyContinue |
+              Where-Object { $_.FullName -notmatch '\\(\.git|windows-x64-artifact)\\' } |
+              Select-Object -First 1
+
+            if (-not $found) {
+              throw "Build output not found: $file. Check the Build from source logs."
             }
+
+            Write-Host "Found $file at $($found.FullName)"
+            $foundFiles += $found
           }
-          $stagingDirectory = Join-Path $env:GITHUB_WORKSPACE "windows-x64-artifact"
+
           New-Item -ItemType Directory -Force -Path $stagingDirectory | Out-Null
-          Copy-Item -Path (Join-Path $outputDirectory "*") -Destination $stagingDirectory -Recurse -Force
-          Get-ChildItem $stagingDirectory -File | Select-Object Name, Length
+
+          $directories = $foundFiles | ForEach-Object { $_.DirectoryName } | Select-Object -Unique
+
+          foreach ($directory in $directories) {
+            Copy-Item -Path (Join-Path $directory "*") -Destination $stagingDirectory -Recurse -Force
+          }
+
+          Get-ChildItem $stagingDirectory -File -Recurse | Select-Object FullName, Length
 
       - name: Upload Windows x64 tools
         if: matrix.os == 'windows-2022'
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: libpff-windows-x64
           path: windows-x64-artifact/
@@ -94,12 +109,12 @@ jobs:
       - name: Configure git
         run: git config --global core.autocrlf false
 
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
 
       - name: Install Cygwin and build dependencies
-        uses: cygwin/cygwin-install-action@5a1b0cd107181fa6bb6bf3f90d500f4fb3132f18 # v7
+        uses: cygwin/cygwin-install-action@5a1b0cd107181fa6bb6bf3f90d500f4fb3132f18
         with:
           packages: autoconf, automake, binutils, curl, gcc-core, gettext-devel, git, libtool, make, pkg-config, python312, python312-devel, zlib-devel
           platform: x86_64
@@ -147,12 +162,12 @@ jobs:
       - name: Configure git
         run: git config --global core.autocrlf false
 
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
 
       - name: Set up MSYS2 with MinGW-w64
-        uses: msys2/setup-msys2@ec48f7c5447b3140e2b088413ae3a55687bccb6e # v2.33.0
+        uses: msys2/setup-msys2@ec48f7c5447b3140e2b088413ae3a55687bccb6e
         with:
           msystem: MINGW64
           update: true
